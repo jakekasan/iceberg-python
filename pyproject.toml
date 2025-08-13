@@ -14,14 +14,15 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-[tool.poetry]
+[project]
 name = "pyiceberg"
 version = "0.10.0"
 readme = "README.md"
 homepage = "https://py.iceberg.apache.org/"
 repository = "https://github.com/apache/iceberg-python"
 description = "Apache Iceberg is an open table format for huge analytic datasets"
-authors = ["Apache Software Foundation <dev@iceberg.apache.org>"]
+requires-python = ">=3.9.2, <=3.12, !=3.9.7"
+authors = [{ name = "Apache Software Foundation", email = "dev@iceberg.apache.org" }]
 license = "Apache License 2.0"
 classifiers = [
   "License :: OSI Approved :: Apache Software License",
@@ -31,6 +32,8 @@ classifiers = [
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
 ]
+
+[tool.poetry]
 packages = [
   { include = "pyiceberg" },
   { from = "vendor", include = "fb303" },
@@ -49,7 +52,6 @@ include = [
 ]
 
 [tool.poetry.dependencies]
-python = "^3.9.2, !=3.9.7"
 mmh3 = ">=4.0.0,<6.0.0"
 requests = ">=2.20.0,<3.0.0"
 click = ">=7.1.1,<9.0.0"
