@@ -76,8 +76,8 @@ class PartitionField(IcebergBaseModel):
 
     source_id: int = Field(alias="source-id")
     field_id: int = Field(alias="field-id")
-    transform: Annotated[  # type: ignore
-        Transform,
+    transform: Annotated[
+        Transform[Any, Any],
         BeforeValidator(parse_transform),
         PlainSerializer(lambda c: str(c), return_type=str),  # pylint: disable=W0108
         WithJsonSchema({"type": "string"}, mode="serialization"),
@@ -221,7 +221,7 @@ class PartitionSpec(IcebergBaseModel):
         :param schema: The schema to bind to.
         :return: A StructType that represents the PartitionSpec, with a NestedField for each PartitionField.
         """
-        nested_fields = []
+        nested_fields: list[NestedField] = []
         for field in self.fields:
             source_type = schema.find_type(field.source_id)
             result_type = field.transform.result_type(source_type)
@@ -233,9 +233,9 @@ class PartitionSpec(IcebergBaseModel):
         partition_type = self.partition_type(schema)
         field_types = partition_type.fields
 
-        field_strs = []
-        value_strs = []
-        for pos in range(len(self.fields)):
+        field_strs: list[str] = []
+        value_strs: list[str] = []
+        for pos, partition_field in enumerate(self.fields):
             partition_field = self.fields[pos]
             value_str = partition_field.transform.to_human_string(field_types[pos].field_type, value=data[pos])
 
@@ -250,14 +250,12 @@ UNPARTITIONED_PARTITION_SPEC = PartitionSpec(spec_id=0)
 
 
 def assign_fresh_partition_spec_ids(spec: PartitionSpec, old_schema: Schema, fresh_schema: Schema) -> PartitionSpec:
-    partition_fields = []
+    partition_fields: list[PartitionField] = []
     for pos, field in enumerate(spec.fields):
         original_column_name = old_schema.find_column_name(field.source_id)
         if original_column_name is None:
             raise ValueError(f"Could not find in old schema: {field}")
         fresh_field = fresh_schema.find_field(original_column_name)
-        if fresh_field is None:
-            raise ValueError(f"Could not find field in fresh schema: {original_column_name}")
         partition_fields.append(
             PartitionField(
                 name=field.name,
