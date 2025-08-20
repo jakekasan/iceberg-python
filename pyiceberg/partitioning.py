@@ -19,9 +19,10 @@ from __future__ import annotations
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from dataclasses import field as dc_field
 from datetime import date, datetime, time
 from functools import cached_property, singledispatch
-from typing import Annotated, Any, Dict, Generic, List, Optional, Tuple, TypeVar, Union
+from typing import Annotated, Any, Dict, Generic, List, Optional, Tuple, TypeVar, Union, cast
 from urllib.parse import quote_plus
 
 from pydantic import (
@@ -244,6 +245,9 @@ class PartitionSpec(IcebergBaseModel):
 
         path = "/".join([field_str + "=" + value_str for field_str, value_str in zip(field_strs, value_strs)])
         return path
+
+    @classmethod
+    def builder_for(cls, schema: Schema) -> PartitionSpecBuilder: ...
 
 
 UNPARTITIONED_PARTITION_SPEC = PartitionSpec(spec_id=0)
@@ -483,3 +487,85 @@ def _(type: IcebergType, value: Optional[Union[uuid.UUID, int, bytes]]) -> Optio
 @_to_partition_representation.register(PrimitiveType)
 def _(type: IcebergType, value: Optional[Any]) -> Optional[Any]:
     return value
+
+
+@dataclass
+class PartitionSpecBuilder:
+    _schema: Schema
+    _fields: list[PartitionField] = dc_field(init=False, default_factory=list)
+    _partition_names: set[str] = dc_field(init=False, default_factory=set)
+    _dedup_fields: dict[tuple[int, str], PartitionField] = dc_field(init=False, default_factory=dict)
+    _spec_id: int = dc_field(init=False, default=0)
+    _last_assigned_field_id: int = dc_field(init=False, default=0)
+    _check_conficts: bool = dc_field(init=False, default=False)
+    _case_sensitive: bool = dc_field(init=False, default=False)
+
+    @property
+    def next_field_id(self) -> int:
+        current_value = self._last_assigned_field_id
+        self._last_assigned_field_id += 1
+        return current_value
+
+    def check_conflicts(self, value: bool):
+        self._check_conficts = value
+        return self
+
+    def case_sensitive(self, value: bool):
+        self._case_sensitive = value
+        return self
+
+    def with_spec_id(self, value: int):
+        self._spec_id = value
+        return self
+
+    def identity(self, source: str, target: Optional[str] = None):
+        source_field = self._find_field(source)
+        if target is None:
+            found_target = self._schema.find_column_name(source_field.field_id)
+            if found_target is None:
+                raise ValueError(f"No target field and source field not findable: {target!r}, {source_field!r}")
+            target = found_target
+
+        self._check_and_add_partition_name(target, source_field.field_id)
+        field = PartitionField(source_id=source_field.field_id, field_id=self.next_field_id, name=target, transform=IdentityTransform())
+        self._check_for_redundant_partitions(field)
+        self._fields.append(field)
+        return self
+
+    def year(self, source: Union[str, NestedField], target: Optional[str] = None):
+        if isinstance(source, str):
+            source = self._find_field(source)
+        if target is None:
+            name = self._schema.find_column_name(source.field_id)
+            target = f"{name}_year"
+        self._check_and_add_partition_name(target, None)
+        field = PartitionField(source.field_id, self.next_field_id, name=target, transform=YearTransform())
+        self._check_for_redundant_partitions(field)
+        self._fields.append(field)
+
+    def _find_field(self, name: str) -> NestedField:
+        column = self._schema.find_field(name, case_sensitive=self._case_sensitive)
+        return column
+
+    def _check_and_add_partition_name(self, target_name: str, source_id: Optional[int]) -> None:
+        schema_field = self._find_field(target_name)
+        if self._check_conficts:
+            # TODO: check on how source_id being null should be handled
+            if schema_field.field_id != source_id:
+                raise ValueError(f"Cannot create identity partition sourced from different fields in schema: {target_name!r}")
+        if not target_name:
+            raise ValueError(f"Cannot use empty partition name: {target_name!r}")
+        if target_name in self._partition_names:
+            raise ValueError(f"Cannot use partition name more than once: {target_name!r}")
+        self._partition_names.add(target_name)
+
+    def _check_for_redundant_partitions(self, field: PartitionField):
+        dedup_key = (
+            field.field_id,
+            cast(Transform[Any, Any], field.transform).dedup_name
+        )
+        partition_field = self._dedup_fields.get(dedup_key)
+        if partition_field is not None:
+            raise ValueError(f"Cannot add redundant partition: {partition_field!r} conflicts with {field!r}")
+        self._dedup_fields[dedup_key] = field
+
