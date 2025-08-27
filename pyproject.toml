@@ -23,7 +23,7 @@ repository = "https://github.com/apache/iceberg-python"
 description = "Apache Iceberg is an open table format for huge analytic datasets"
 authors = [{ name = "Apache Software Foundation", email = "dev@iceberg.apache.org" }]
 license = "Apache License 2.0"
-requires-python = ">=3.9.2, !=3.9.7, >=3.10, <4.0"
+requires-python = ">=3.9.2, !=3.9.7, <4.0"
 classifiers = [
   "License :: OSI Approved :: Apache Software License",
   "Operating System :: OS Independent",
