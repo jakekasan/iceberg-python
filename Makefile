@@ -131,7 +131,7 @@ coverage-report: ## Combine and report coverage
 ##@ Documentation
 
 docs-install: ## Install docs dependencies
-	poetry install --with docs
+	poetry install --extras "docs"
 
 docs-serve: ## Serve local docs preview (hot reload)
 	poetry run mkdocs serve -f mkdocs/mkdocs.yml
